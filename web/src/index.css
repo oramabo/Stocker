@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    @apply h-full;
+  }
+
+  body {
+    @apply bg-ink font-sans text-slate-100 antialiased;
+    /* Numbers must not jitter as prices tick. */
+    font-variant-numeric: tabular-nums;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: contain;
+  }
+
+  input,
+  select,
+  textarea {
+    @apply bg-ink border border-edge rounded-lg px-3 py-2.5 text-slate-100 outline-none;
+    font-size: 16px; /* stops iOS Safari zooming on focus */
+  }
+
+  input:focus,
+  select:focus,
+  textarea:focus {
+    @apply border-amber/60;
+  }
+}
+
+@layer components {
+  .num {
+    @apply font-mono tabular-nums;
+  }
+
+  .card {
+    @apply bg-card border border-edge/60 rounded-2xl;
+  }
+
+  .btn {
+    @apply rounded-xl px-4 py-3 font-medium transition active:scale-[0.98] disabled:opacity-50;
+  }
+
+  .btn-primary {
+    @apply btn bg-amber text-ink;
+  }
+
+  .btn-ghost {
+    @apply btn bg-card border border-edge text-slate-200;
+  }
+
+  .label {
+    @apply text-xs uppercase tracking-wider text-muted;
+  }
+}
