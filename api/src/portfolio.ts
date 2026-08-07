@@ -115,7 +115,9 @@ export function buildPosition(
   const currentPrice = price?.price ?? null;
   const prevClose = price?.prev_close ?? null;
 
-  const costBasis = round(s.shares * s.avgCost);
+  // Use the accumulated cost directly: shares × the rounded average re-introduces
+  // the rounding error the average already absorbed.
+  const costBasis = s.cost;
   const marketValue = currentPrice === null ? 0 : round(s.shares * currentPrice);
   // Without a live price we cannot state a gain — report zero rather than a
   // fabricated loss against a market value of 0.
