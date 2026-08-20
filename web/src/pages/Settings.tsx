@@ -19,6 +19,8 @@ function toCsv(rows: Record<string, unknown>[]): string {
 export function Settings() {
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [widgetStatus, setWidgetStatus] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const token = getToken() ?? '';
   const masked = token ? `${token.slice(0, 3)}${'•'.repeat(Math.max(token.length - 3, 4))}` : '—';
@@ -65,6 +67,42 @@ export function Settings() {
     }
   };
 
+  /**
+   * The script ships with a placeholder BASE so the public repo carries nobody's
+   * deployment URL. Point it at wherever this page is being served from.
+   */
+  const personalise = (script: string) =>
+    script.replace(/const BASE = "[^"]*";/, `const BASE = "${location.origin}";`);
+
+  /**
+   * Safari only allows a clipboard write inside the user gesture that triggered
+   * it, so an `await fetch(...)` before `writeText` gets rejected on iOS. The
+   * supported way round it is to hand ClipboardItem the pending promise and let
+   * the browser resolve it itself.
+   */
+  const copyWidget = async () => {
+    setWidgetStatus(null);
+    const src = '/widget.js';
+    try {
+      const ClipboardItemCtor = (window as { ClipboardItem?: typeof ClipboardItem }).ClipboardItem;
+      if (ClipboardItemCtor && navigator.clipboard?.write) {
+        const text = fetch(src)
+          .then((r) => r.text())
+          .then((t) => new Blob([personalise(t)], { type: 'text/plain' }));
+        await navigator.clipboard.write([new ClipboardItemCtor({ 'text/plain': text })]);
+      } else {
+        const text = await fetch(src).then((r) => r.text());
+        await navigator.clipboard.writeText(personalise(text));
+      }
+      setCopied(true);
+      setWidgetStatus('Script copied. Paste it into a new Scriptable script named “Stocker”.');
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      window.open(src, '_blank');
+      setWidgetStatus('Copy was blocked, so the script opened in a new tab — long-press it and Select All.');
+    }
+  };
+
   const signOut = () => {
     setToken(null);
     location.reload();
@@ -98,6 +136,21 @@ export function Settings() {
           Export transactions as CSV
         </button>
         {status && <p className="text-xs text-muted">{status}</p>}
+      </section>
+
+      <section className="card p-4 space-y-3">
+        <div>
+          <p className="label">Home screen widget</p>
+          <p className="text-xs text-muted mt-1">
+            Install <span className="text-slate-300">Scriptable</span> from the App Store, copy the
+            script, paste it into a new script named “Stocker”, then run it once to store your token.
+            Add the widget from the home screen with long-press → + → Scriptable.
+          </p>
+        </div>
+        <button onClick={copyWidget} className="btn-ghost w-full">
+          {copied ? 'Copied ✓' : 'Copy widget script'}
+        </button>
+        {widgetStatus && <p className="text-xs text-muted">{widgetStatus}</p>}
       </section>
 
       <section className="card p-4">
