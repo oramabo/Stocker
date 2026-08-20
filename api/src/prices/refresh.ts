@@ -1,4 +1,4 @@
-import { computePositions, upsertPrice } from '../db';
+import { computePositions, ensureStock, tickersMissingName, upsertPrice } from '../db';
 import { buildSummary } from '../portfolio';
 import type { Env } from '../types';
 import type { PriceProvider } from './provider';
@@ -29,6 +29,10 @@ export async function refreshPrices(env: Env, provider: PriceProvider): Promise<
   const failed: { ticker: string; error: string }[] = [];
   const updatedAt = new Date().toISOString();
 
+  // Retry any display names the initial lookup never managed to resolve. Costs
+  // one extra call per affected ticker, once, and then never again.
+  const missingName = provider.getProfile ? await tickersMissingName(env.DB) : new Set<string>();
+
   for (let i = 0; i < tickers.length; i++) {
     const ticker = tickers[i];
     try {
@@ -42,6 +46,19 @@ export async function refreshPrices(env: Env, provider: PriceProvider): Promise<
     } catch (err) {
       failed.push({ ticker, error: err instanceof Error ? err.message : String(err) });
     }
+
+    if (missingName.has(ticker) && provider.getProfile) {
+      await sleep(CALL_DELAY_MS);
+      try {
+        const profile = await provider.getProfile(ticker);
+        if (profile?.name) {
+          await ensureStock(env.DB, ticker, { name: profile.name, currency: profile.currency });
+        }
+      } catch {
+        // A display name is cosmetic; never fail a price refresh over one.
+      }
+    }
+
     if (i < tickers.length - 1) await sleep(CALL_DELAY_MS);
   }
 

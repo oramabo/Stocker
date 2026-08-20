@@ -40,6 +40,18 @@ export async function ensureStock(
   }
 }
 
+/**
+ * Tickers whose display name was never resolved. The name is only looked up the
+ * first time a ticker is seen, so a provider that was rate-limited or down at
+ * that moment would otherwise leave the row blank forever.
+ */
+export async function tickersMissingName(db: D1Database): Promise<Set<string>> {
+  const { results } = await db
+    .prepare(`SELECT ticker FROM stocks WHERE name IS NULL OR name = ''`)
+    .all<{ ticker: string }>();
+  return new Set((results ?? []).map((r) => r.ticker));
+}
+
 export async function allTransactions(db: D1Database): Promise<Transaction[]> {
   const { results } = await db
     .prepare('SELECT * FROM transactions ORDER BY trade_date ASC, id ASC')
