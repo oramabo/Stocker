@@ -33,7 +33,10 @@ home screen.
 - [Working with the database](#working-with-the-database)
 - [API reference](#api-reference)
 - [How the numbers work](#how-the-numbers-work)
+- [Install on your phone](#install-on-your-phone)
+- [Home screen widget](#home-screen-widget)
 - [iOS Shortcut integration](#ios-shortcut-integration)
+- [Security and privacy](#security-and-privacy)
 - [Project layout](#project-layout)
 - [Swapping the price provider](#swapping-the-price-provider)
 - [Troubleshooting](#troubleshooting)
@@ -53,6 +56,10 @@ home screen.
 - **Daily snapshots** of portfolio value, drawn as a history chart.
 - **Mobile-first UI** built for a 390 px viewport, dark, with tabular monospace figures so
   numbers don't jitter as prices tick.
+- **Installs as an app** on iOS and Android straight from the browser — no App Store, no
+  Play Store, no build pipeline.
+- **Home screen widget** for iOS via Scriptable, showing totals, your holdings and a
+  portfolio-value sparkline, with a copy-paste button built into Settings.
 - **iOS Shortcut endpoint** returning one line of plain text — no JSON parsing needed to
   ask Siri how you're doing.
 - **One user, one token.** No accounts, no sign-up, no third party holding your positions.
@@ -61,7 +68,7 @@ home screen.
 
 | | |
 |---|---|
-| **Portfolio** | Total value, unrealised P/L and day change, then a card per holding. Pull down to refresh prices. |
+| **Portfolio** | Total value, unrealised P/L and day change, then your holdings — as cards or as a dense sortable table. Search by ticker or company name, filter by gainers / losers / unpriced / closed, and sort by any column. Defaults to highest value first. Pull down to refresh prices. |
 | **Stock detail** | Position summary and every transaction with its own lot P/L against the live price. |
 | **Add / Edit** | Ticker autocomplete, buy/sell/dividend, commission, date and note. |
 | **History** | Portfolio value from daily snapshots, 1M / 3M / 1Y / All. |
@@ -498,6 +505,103 @@ also writes that day's row into `snapshots`, which is what the History chart dra
 
 ---
 
+## Install on your phone
+
+Stocker ships a web app manifest and a full icon set, so both platforms can install it as a
+standalone app — its own home screen icon, no browser chrome, no store involved.
+
+### iOS
+
+Safari is required here. Chrome and Firefox on iOS cannot install web apps.
+
+1. Open your deployment in **Safari** and enter your `APP_TOKEN`.
+2. **Share** (□↑) → **Add to Home Screen** → **Add**.
+
+### Android
+
+1. Open your deployment in **Chrome** and enter your `APP_TOKEN`.
+2. **⋮** menu → **Install app** (older versions say *Add to Home screen*).
+
+Android installs it as a true PWA, so it also appears in the app drawer and the app
+switcher.
+
+> **If you installed before v1.1**, delete the old tile and re-add it. iOS caches the icon
+> at install time and will keep showing the pre-icon screenshot otherwise.
+
+---
+
+## Home screen widget
+
+### iOS — Scriptable
+
+[Scriptable](https://scriptable.app) is a free app that runs JavaScript widgets. Stocker
+serves a ready-made widget script at `/widget.js`.
+
+1. Install **Scriptable** from the App Store.
+2. In Stocker, go to **Settings → Copy widget script**. This copies the script with your
+   deployment's URL already filled in.
+3. Scriptable → **+** → paste → name the script **Stocker**.
+4. Tap **▶** once. It prompts for your `APP_TOKEN` and stores it in the **iOS Keychain** —
+   the token is never written into the script or sent anywhere but your own API.
+5. Home screen → long-press → **+** → **Scriptable** → choose a size → **Add Widget**.
+6. Long-press the new widget → **Edit Widget** → **Script: Stocker**.
+
+| Size | Shows |
+|---|---|
+| Small | Total value, day change, total P/L, top 3 holdings |
+| Medium | The above plus cost, dividends, realised P/L and 6 holdings |
+| Large | The above plus position count and up to 12 holdings |
+| Lock screen | Value and day change (rectangular accessory widget) |
+
+Behaviour worth knowing:
+
+- **Sparkline.** Portfolio value is drawn as a faded area chart across the bottom, using
+  `/api/history`. It appears once there are two daily snapshots to draw a line between, so
+  roughly two days after first deploy.
+- **Stale prices are marked.** Quotes refresh only during market hours. When the last quote
+  is over 30 minutes old the widget says `at close` rather than `today`, fades the red/green
+  and footers with `closed · Thu 20:45`, so a frozen day-change never reads as a live one.
+- **Movers mode.** Long-press → **Edit Widget** → **Parameter** → `movers` ranks holdings by
+  today's biggest move in either direction instead of by position size. Leave it empty for
+  size ranking. Two widgets can run the same script with different parameters.
+- **Tapping a ticker** opens that stock's detail page; tapping anywhere else opens the app.
+- **Refresh cadence** is iOS's decision. The script asks for 15 minutes to match the price
+  cron, but the system throttles based on battery and usage.
+
+If you copy `widget.js` from this repo rather than from the Settings button, set `BASE` at
+the top of the file to your own origin first.
+
+### Android
+
+Android has no direct equivalent to Scriptable, so there is no drop-in script. What it does
+have is the same building block: `/api/shortcut/summary` returns one line of plain text and
+costs no price-provider quota.
+
+```
+Portfolio: $47,420 · +$8,763 (+22.7%) · today +$264 (+0.6%)
+```
+
+Any widget tool that can poll a URL and render the response will work. With
+[KWGT](https://play.google.com/store/apps/details?id=org.kustom.widget), add a text item
+whose formula fetches it:
+
+```
+$wg("https://your-app.workers.dev/api/shortcut/summary?token=YOUR_URL_ENCODED_TOKEN", text)$
+```
+
+Tasker, Automate and HTTP Shortcuts can drive the same endpoint. Two cautions:
+
+- **URL-encode the token.** A base64 token contains `/`, `+` and `=`, which must become
+  `%2F`, `%2B` and `%3D`. The `?token=` form exists precisely for tools that cannot set
+  headers.
+- **Prefer the `Authorization` header** wherever the tool supports it. Tokens in query
+  strings have a habit of turning up in logs and screenshots.
+
+Third-party app UIs change often, so treat the steps above as the shape of the job rather
+than exact taps.
+
+---
+
 ## iOS Shortcut integration
 
 `/api/shortcut/summary` returns a single line of plain text, served entirely from cached
@@ -542,6 +646,35 @@ message you can show straight in the notification.
 
 ---
 
+## Security and privacy
+
+This repository is public and contains no credentials. If you fork it, the same rules keep
+it that way.
+
+| What | Where it lives | In the repo? |
+|---|---|---|
+| `APP_TOKEN` | Cloudflare Secrets (`wrangler secret put`) | Never |
+| `FINNHUB_API_KEY` | Cloudflare Secrets | Never |
+| Local dev values | `.dev.vars` | Gitignored — `.dev.vars.example` holds placeholders only |
+| Database exports | `backups/` | Gitignored — exports contain your real positions |
+| Browser session | `localStorage` on your device | n/a |
+| Widget token | iOS Keychain, via Scriptable | Never — `widget.js` ships a placeholder URL and no token |
+
+A few notes:
+
+- **`database_id` in `wrangler.toml` is not a credential.** It is an account-scoped
+  identifier and useless to anyone without your Cloudflare login. It is committed so this
+  repo deploys as-is; if you fork, replace it with your own from `wrangler d1 create`.
+- **The app fails closed.** With no `APP_TOKEN` set, the API returns 500 rather than serving
+  your portfolio unguarded. Every `/api` route requires the bearer token; there is no
+  unauthenticated read path.
+- **Rotating the token:** `wrangler secret put APP_TOKEN`, then **Settings → Forget token on
+  this device** in each browser, and re-run the Scriptable script to re-enter it.
+- **Back up before you experiment.** `wrangler d1 export` is the only copy of your data;
+  D1 has no undo.
+
+---
+
 ## Project layout
 
 ```
@@ -559,6 +692,7 @@ Stocker/
 │   │       └── refresh.ts   Refresh loop, snapshots, cron handler
 │   └── test/                Vitest — math, routes, refresh
 ├── web/                     React frontend
+│   ├── public/              Served as-is: icons, manifest.json, widget.js
 │   └── src/
 │       ├── pages/           Dashboard, StockDetail, TransactionForm, History, Settings
 │       ├── components/      Nav, TokenGate, PullToRefresh
@@ -567,6 +701,10 @@ Stocker/
 ├── docs/screenshots/        Images used in this README
 └── wrangler.toml            Worker, D1, assets and cron configuration
 ```
+
+`web/public/widget.js` is the Scriptable widget, served verbatim at `/widget.js`. It is
+plain JavaScript against Scriptable's API — not part of the React build — which is why it
+carries its own header comment and a placeholder `BASE`.
 
 The position math in `api/src/portfolio.ts` is deliberately pure — it takes an array of
 transactions and returns numbers, with no database access — which is what makes the edge
@@ -616,6 +754,11 @@ Either `FINNHUB_API_KEY` isn't set, or no refresh has run yet — the cron only 
 market hours. Hit **Refresh prices now** in Settings. A position with no quote is carried
 at cost, so it reads as "no gain known" rather than a total loss.
 
+**Company names show as “—”, and searching by name finds nothing**
+A name is looked up the first time a ticker is recorded; if the provider was rate-limited at
+that moment the row stays blank. Every price refresh now retries the missing ones, so they
+fill in on their own within a few cron ticks. Nothing needs doing by hand.
+
 **A ticker never gets a price**
 Finnhub returns an all-zero quote for symbols it doesn't cover, which Stocker treats as "no
 data" and reports under `failed` in the refresh response. Check the symbol on Finnhub —
@@ -630,6 +773,23 @@ have something to draw. You can seed one immediately with
 `npm run dev:api` serves the pre-built bundle. Either re-run `npm run build`, or use
 `npm run dev:web` on :5173 for hot-reload.
 
+**The widget shows “Bad token” in red**
+The stored token no longer matches the deployed `APP_TOKEN`. The script clears the bad value
+automatically — open it in Scriptable and tap ▶ to enter the current one.
+
+**The widget shows “Open this script in Scriptable to add your token”**
+It has never been run interactively, so there is nothing in the Keychain yet. Widgets cannot
+show a prompt; run the script once inside the Scriptable app first.
+
+**The widget numbers are stale, or the sparkline is missing**
+iOS decides when widgets refresh and throttles aggressively on low battery. A missing
+sparkline means fewer than two daily snapshots exist yet — it needs about two days after
+first deploy. Both are expected rather than faults.
+
+**The widget can't reach the API**
+If you copied `widget.js` from the repo instead of the Settings button, `BASE` is still the
+placeholder. Set it to your own origin, or re-copy via **Settings → Copy widget script**.
+
 ---
 
 ## Not in this version
@@ -637,6 +797,12 @@ have something to draw. You can seed one immediately with
 Multi-user accounts, broker sync and CSV import, options and crypto, tax reporting,
 streaming prices, multi-currency display with FX, FIFO/specific-lot accounting, price
 alerts, and benchmark comparison.
+
+**Stock splits** are worth calling out, because they fail quietly. There is no `split`
+transaction type: after a 2-for-1 split the quote halves overnight while your share count
+stays put, and the app will show a ~50% loss that never happened. The fix is manual — edit
+each buy from before the split, doubling `quantity` and halving `price`. Average-cost
+accounting absorbs that exactly, and every derived number corrects itself on the next read.
 
 ---
 
