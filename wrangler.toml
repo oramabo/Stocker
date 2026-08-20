@@ -16,7 +16,7 @@ run_worker_first = ["/api/*"]
 binding = "DB"
 database_name = "stocker"
 # Replace with the id printed by: wrangler d1 create stocker
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_id = "3690fee1-887e-410c-b983-3d3ee56a3919"
 migrations_dir = "db/migrations"
 
 # Every 15 minutes, Mon-Fri, 13:00-21:45 UTC (covers the US session incl. the

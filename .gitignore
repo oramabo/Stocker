@@ -4,3 +4,5 @@ dist/
 .dev.vars
 *.local
 .DS_Store
+# Database exports contain real portfolio data — never commit them.
+backups/
