@@ -1,9 +1,23 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, type Position, type Summary } from '../lib/api';
 import { money, pct, plColor, relativeTime, shares } from '../lib/format';
 import { useAsync } from '../lib/useAsync';
 import { PullToRefresh } from '../components/PullToRefresh';
+import { PositionControls } from '../components/PositionControls';
+import { PositionTable } from '../components/PositionTable';
+import {
+  applyView,
+  countFor,
+  FILTERS,
+  loadPrefs,
+  savePrefs,
+  SORTS,
+  type FilterKey,
+  type SortKey,
+  type ViewMode,
+  type ViewPrefs,
+} from '../lib/positionView';
 
 export function Dashboard() {
   const load = useCallback(
@@ -13,6 +27,23 @@ export function Dashboard() {
   const { data, error, loading, reload } = useAsync(load);
   const [refreshing, setRefreshing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // Sort/view choices persist; search and filter reset on each visit.
+  const [prefs, setPrefs] = useState<ViewPrefs>(loadPrefs);
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<FilterKey>('all');
+
+  const update = (patch: Partial<ViewPrefs>) => {
+    setPrefs((prev) => {
+      const next = { ...prev, ...patch };
+      savePrefs(next);
+      return next;
+    });
+  };
+
+  // Choosing a column applies its natural direction; picking the same one flips it.
+  const chooseSort = (key: SortKey) =>
+    update(key === prefs.sort ? { dir: prefs.dir === 'desc' ? 'asc' : 'desc' } : { sort: key, dir: SORTS[key].dir });
 
   const refresh = async () => {
     setRefreshing(true);
@@ -30,13 +61,27 @@ export function Dashboard() {
     }
   };
 
+  // Hooks must run on every render, so these sit above the loading guards.
+  const positions = data?.positions ?? NO_POSITIONS;
+
+  const visible = useMemo(
+    () => applyView(positions, { search, filter, sort: prefs.sort, dir: prefs.dir }),
+    [positions, search, filter, prefs.sort, prefs.dir],
+  );
+
+  const counts = useMemo(() => {
+    const out = {} as Record<FilterKey, number>;
+    for (const f of FILTERS) out[f.key] = countFor(positions, f.key);
+    return out;
+  }, [positions]);
+
   if (loading && !data) return <Skeleton />;
   if (error && !data) return <p className="p-5 text-down">{error}</p>;
   if (!data) return null;
 
-  const { summary, positions } = data;
-  const held = positions.filter((p) => p.shares_held > 0);
-  const closed = positions.filter((p) => p.shares_held <= 0);
+  const { summary } = data;
+  const empty = positions.length === 0;
+  const filtered = search.trim() !== '' || filter !== 'all';
 
   return (
     <PullToRefresh onRefresh={refresh} busy={refreshing}>
@@ -45,33 +90,71 @@ export function Dashboard() {
 
         {notice && <p className="text-xs text-down px-1">{notice}</p>}
 
-        {held.length === 0 && (
+        {empty ? (
           <div className="card p-6 text-center space-y-3">
             <p className="text-muted text-sm">No open positions yet.</p>
             <Link to="/add" className="btn-primary inline-block">
               Add your first transaction
             </Link>
           </div>
-        )}
+        ) : (
+          <>
+            <PositionControls
+              search={search}
+              onSearch={setSearch}
+              filter={filter}
+              onFilter={setFilter}
+              sort={prefs.sort}
+              dir={prefs.dir}
+              onSort={(key) => update({ sort: key, dir: SORTS[key].dir })}
+              onToggleDir={() => update({ dir: prefs.dir === 'desc' ? 'asc' : 'desc' })}
+              view={prefs.view}
+              onView={(view: ViewMode) => update({ view })}
+              counts={counts}
+            />
 
-        <div className="space-y-3">
-          {held.map((position) => (
-            <PositionCard key={position.ticker} position={position} />
-          ))}
-        </div>
+            {visible.length === 0 ? (
+              <div className="card p-6 text-center space-y-3">
+                <p className="text-muted text-sm">Nothing matches those filters.</p>
+                <button
+                  onClick={() => {
+                    setSearch('');
+                    setFilter('all');
+                  }}
+                  className="btn-ghost"
+                >
+                  Clear filters
+                </button>
+              </div>
+            ) : prefs.view === 'table' ? (
+              <PositionTable
+                positions={visible}
+                sort={prefs.sort}
+                dir={prefs.dir}
+                onSort={chooseSort}
+              />
+            ) : (
+              <div className="space-y-3">
+                {visible.map((position) => (
+                  <PositionCard key={position.ticker} position={position} />
+                ))}
+              </div>
+            )}
 
-        {closed.length > 0 && (
-          <section className="space-y-3 pt-2">
-            <h2 className="label px-1">Closed</h2>
-            {closed.map((position) => (
-              <PositionCard key={position.ticker} position={position} />
-            ))}
-          </section>
+            {filtered && visible.length > 0 && (
+              <p className="px-1 text-xs text-muted num">
+                {visible.length} of {counts.all + counts.closed} positions
+              </p>
+            )}
+          </>
         )}
       </div>
     </PullToRefresh>
   );
 }
+
+/** Stable reference so the memos below don't re-run while data is loading. */
+const NO_POSITIONS: Position[] = [];
 
 function TotalCard({
   summary,
